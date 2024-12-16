@@ -44,10 +44,7 @@ pub fn run(path: &Path, opt: Options) {
         })
         .for_each(|(path, schema)| {
             let (schema, batch_sep) = if opt.show_schema {
-                (
-                    format!("\n{}", schema.join("\n")),
-                    opt.batch_separator.as_str(),
-                )
+                (format!("\n{schema}"), opt.batch_separator.as_str())
             } else {
                 (String::new(), "")
             };
@@ -96,7 +93,7 @@ fn file_fetch_schema(
     path: &Path,
     format_sql: bool,
     format_sql_pretty: bool,
-) -> anyhow::Result<Vec<String>> {
+) -> anyhow::Result<String> {
     let conn = rusqlite::Connection::open(path)?;
     let sql = "SELECT sql FROM sqlite_master WHERE type IN ('table', 'view', 'index')";
     let mut statement = conn.prepare(sql)?;
@@ -117,11 +114,18 @@ fn file_fetch_schema(
                 } else {
                     sql
                 };
+                let indent = "    ";
+                let sql = sql
+                    .lines()
+                    .map(|line| format!("{indent}{line}"))
+                    .collect::<Vec<String>>()
+                    .join("\n");
                 schema.push(sql);
             }
         }
     }
     schema.sort();
+    let schema = schema.join("\n");
     Ok(schema)
 }
 
