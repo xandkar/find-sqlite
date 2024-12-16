@@ -24,16 +24,20 @@ pub fn run(path: &Path, opt: Options) {
         .filter(|path| path.is_file())
         .filter_map(|path| {
             file_has_sqlite_header(&path)
-                .inspect_err(|_error| {
-                    // TODO Log errors.
+                .inspect_err(|error| {
+                    tracing::warn!(
+                        ?error,
+                        ?path,
+                        "Failed to check file for SQLite header."
+                    );
                 })
                 .ok()
                 .and_then(|has_header| has_header.then_some(path))
         })
         .filter_map(|path| {
             file_fetch_schema(&path, opt.format_sql, opt.format_sql_pretty)
-                .inspect_err(|_error| {
-                    // TODO Log errors.
+                .inspect_err(|error| {
+                    tracing::warn!(?error, ?path, "Failed to fetch schema.");
                 })
                 .ok()
                 .map(|schema| (path, schema))
@@ -50,6 +54,26 @@ pub fn run(path: &Path, opt: Options) {
             // XXX Single print statement to avoid interleaved output.
             println!("{path:?}{schema}{batch_sep}");
         });
+}
+
+pub fn tracing_init(level: Option<tracing::Level>) -> anyhow::Result<()> {
+    use tracing_subscriber::{fmt, layer::SubscriberExt, EnvFilter, Layer};
+
+    if let Some(level) = level {
+        let layer_stderr = fmt::Layer::new()
+            .with_writer(std::io::stderr)
+            .with_ansi(true)
+            .with_file(false)
+            .with_line_number(true)
+            .with_thread_ids(true)
+            .with_filter(
+                EnvFilter::from_default_env().add_directive(level.into()),
+            );
+        tracing::subscriber::set_global_default(
+            tracing_subscriber::registry().with(layer_stderr),
+        )?;
+    }
+    Ok(())
 }
 
 fn file_has_sqlite_header(path: &Path) -> anyhow::Result<bool> {
@@ -80,8 +104,8 @@ fn file_fetch_schema(
     let mut rows = statement.query([])?;
     while let Some(row) = rows.next()? {
         match row.get::<_, String>(0) {
-            Err(_error) => {
-                // TODO Optional logging.
+            Err(error) => {
+                tracing::warn!(?error, ?row, "Failed to access a row.");
             }
             Ok(sql) => {
                 let sql = if format_sql {
