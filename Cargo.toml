@@ -1,6 +1,6 @@
 [package]
 name = "find-sqlite"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 description = "SQLite DB file finder"
 repository = "https://github.com/xandkar/sqlite-finder"
@@ -15,4 +15,5 @@ anyhow = { version = "1.0.94", features = ["backtrace"] }
 clap = { version = "4.5.23", features = ["derive"] }
 rayon = "1.10.0"
 rusqlite = "0.32.1"
+sqlformat = "0.3.3"
 walkdir = "2.5.0"
