@@ -28,6 +28,7 @@ struct Cli {
 }
 
 fn main() -> anyhow::Result<()> {
+    human_panic_setup();
     let cli = Cli::parse();
     let opt = find_sqlite::Options {
         show_schema: cli.schema,
@@ -38,4 +39,19 @@ fn main() -> anyhow::Result<()> {
     find_sqlite::tracing_init(cli.log_level)?;
     find_sqlite::run(&cli.path, opt);
     Ok(())
+}
+
+fn human_panic_setup() {
+    macro_rules! repo {
+        () => {
+            env!("CARGO_PKG_REPOSITORY")
+        };
+    }
+    human_panic::setup_panic!(human_panic::Metadata::new(
+        env!("CARGO_PKG_NAME"),
+        env!("CARGO_PKG_VERSION")
+    )
+    .authors(env!("CARGO_PKG_AUTHORS"))
+    .homepage(repo!())
+    .support(concat!("- Submit an issue at ", repo!(), "/issues")));
 }
