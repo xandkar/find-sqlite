@@ -6,7 +6,7 @@ Find any valid SQLite database files.
 Examples
 --------
 
-### Just paths
+### Paths only
 
 ```
 $ find-sqlite ~/.cargo/git
