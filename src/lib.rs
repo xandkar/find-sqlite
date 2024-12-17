@@ -74,8 +74,10 @@ pub fn tracing_init(level: Option<tracing::Level>) -> anyhow::Result<()> {
 }
 
 fn file_has_sqlite_header(path: &Path) -> anyhow::Result<bool> {
+    const SQLITE_HEADER: &[u8; 16] = b"SQLite format 3\0";
+
     let mut file = File::open(path)?;
-    let mut buf = [0u8; 16];
+    let mut buf = [0u8; SQLITE_HEADER.len()];
     let read_result = file.read_exact(&mut buf);
     match read_result.map_err(|e| e.kind()) {
         Err(ErrorKind::UnexpectedEof) => {
@@ -86,7 +88,7 @@ fn file_has_sqlite_header(path: &Path) -> anyhow::Result<bool> {
         }
         Ok(()) => {}
     }
-    Ok(buf[..].eq(b"SQLite format 3\0"))
+    Ok(buf[..].eq(SQLITE_HEADER))
 }
 
 fn file_fetch_schema(
