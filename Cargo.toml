@@ -1,6 +1,6 @@
 [package]
 name = "find-sqlite"
-version = "0.4.1"
+version = "0.5.0"
 edition = "2021"
 description = "SQLite DB file finder"
 repository = "https://github.com/xandkar/sqlite-finder"
@@ -14,9 +14,12 @@ readme = "README.md"
 anyhow = { version = "1.0.94", features = ["backtrace"] }
 clap = { version = "4.5.23", features = ["derive"] }
 human-panic = "2.0.2"
+human-units = "0.2.0"
+humantime = "2.1.0"
 rayon = "1.10.0"
 rusqlite = "0.32.1"
 sqlformat = "0.3.3"
 tracing = "0.1.41"
 tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
+umask = "2.1.0"
 walkdir = "2.5.0"

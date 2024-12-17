@@ -1,6 +1,7 @@
 use std::{
-    fs::File,
+    fs::{self, File, Metadata},
     io::{ErrorKind, Read},
+    os::unix::fs::{MetadataExt, PermissionsExt},
     path::Path,
 };
 
@@ -8,7 +9,10 @@ use anyhow::anyhow;
 use rayon::iter::{ParallelBridge, ParallelIterator};
 use walkdir::WalkDir;
 
+const INDENT: &str = "    ";
+
 pub struct Options {
+    pub show_metadata: bool,
     pub show_schema: bool,
     pub batch_separator: String,
     pub format_sql: bool,
@@ -21,8 +25,20 @@ pub fn run(path: &Path, opt: Options) {
         .par_bridge()
         .filter_map(|entry_result| entry_result.ok())
         .map(|entry| entry.into_path())
-        .filter(|path| path.is_file())
         .filter_map(|path| {
+            fs::metadata(&path)
+                .inspect_err(|error| {
+                    tracing::warn!(
+                        ?error,
+                        ?path,
+                        "Failed to fetch file metadata."
+                    );
+                })
+                .ok()
+                .map(|meta| (path, meta))
+        })
+        .filter(|(_path, meta)| meta.is_file())
+        .filter_map(|(path, meta)| {
             file_has_sqlite_header(&path)
                 .inspect_err(|error| {
                     tracing::warn!(
@@ -32,24 +48,46 @@ pub fn run(path: &Path, opt: Options) {
                     );
                 })
                 .ok()
-                .and_then(|has_header| has_header.then_some(path))
+                .and_then(|has_header| has_header.then_some((path, meta)))
         })
-        .filter_map(|path| {
+        .filter_map(|(path, meta)| {
             file_fetch_schema(&path, opt.format_sql, opt.format_sql_pretty)
                 .inspect_err(|error| {
                     tracing::warn!(?error, ?path, "Failed to fetch schema.");
                 })
                 .ok()
-                .map(|schema| (path, schema))
+                .map(|schema| (path, meta, schema))
         })
-        .for_each(|(path, schema)| {
-            let (schema, batch_sep) = if opt.show_schema {
-                (format!("\n{schema}"), opt.batch_separator.as_str())
+        .filter_map(|(path, meta, schema)| {
+            metadata_fmt(&meta)
+                .inspect_err(|error| {
+                    tracing::warn!(
+                        ?error,
+                        ?path,
+                        "Failed to format metadata."
+                    );
+                })
+                .ok()
+                .map(|meta| (path, meta, schema))
+        })
+        .for_each(|(path, meta, schema)| {
+            let meta = if opt.show_metadata {
+                format!("\n{INDENT}meta\n{meta}")
             } else {
-                (String::new(), "")
+                String::new()
+            };
+            let schema = if opt.show_schema {
+                format!("\n{INDENT}schema\n{schema}")
+            } else {
+                String::new()
+            };
+            let batch_sep = if opt.show_metadata || opt.show_schema {
+                opt.batch_separator.as_str()
+            } else {
+                ""
             };
             // XXX Single print statement to avoid interleaved output.
-            println!("{path:?}{schema}{batch_sep}");
+            println!("{path:?}{meta}{schema}{batch_sep}");
         });
 }
 
@@ -91,6 +129,30 @@ fn file_has_sqlite_header(path: &Path) -> anyhow::Result<bool> {
     Ok(buf[..].eq(SQLITE_HEADER))
 }
 
+fn metadata_fmt(meta: &Metadata) -> anyhow::Result<String> {
+    let user = meta.uid();
+    let group = meta.gid();
+    let size = human_units::Size(meta.len());
+    let perm = umask::Mode::from(meta.permissions().mode());
+    let mtime = humantime::format_rfc3339(meta.modified()?);
+    let atime = humantime::format_rfc3339(meta.accessed()?);
+    let btime = humantime::format_rfc3339(meta.created()?);
+    let lines = [
+        format!("btime {btime}"),
+        format!("mtime {mtime}"),
+        format!("atime {atime}"),
+        format!("size {size}"),
+        format!("perm {perm}"),
+        format!("owner {user}:{group}"),
+    ];
+    let meta = lines
+        .iter()
+        .map(|line| format!("{INDENT}{INDENT}{line}"))
+        .collect::<Vec<String>>()
+        .join("\n");
+    Ok(meta)
+}
+
 fn file_fetch_schema(
     path: &Path,
     format_sql: bool,
@@ -116,10 +178,9 @@ fn file_fetch_schema(
                 } else {
                     sql
                 };
-                let indent = "    ";
                 let sql = sql
                     .lines()
-                    .map(|line| format!("{indent}{line}"))
+                    .map(|line| format!("{INDENT}{INDENT}{line}"))
                     .collect::<Vec<String>>()
                     .join("\n");
                 schema.push(sql);

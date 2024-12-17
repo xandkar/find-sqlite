@@ -6,6 +6,10 @@ use clap::Parser;
 struct Cli {
     path: PathBuf,
 
+    /// Print file metadata.
+    #[clap(short, long)]
+    meta: bool,
+
     /// Print schemas.
     #[clap(short, long)]
     schema: bool,
@@ -31,6 +35,7 @@ fn main() -> anyhow::Result<()> {
     human_panic_setup();
     let cli = Cli::parse();
     let opt = find_sqlite::Options {
+        show_metadata: cli.meta,
         show_schema: cli.schema,
         batch_separator: cli.batch_sep.to_string(),
         format_sql: !cli.no_fmt,
